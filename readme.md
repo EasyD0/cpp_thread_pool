@@ -41,6 +41,4 @@
 ###### cpp条件变量 condition_variable
 >  https://en.cppreference.com/w/cpp/thread/condition_variable
 
-使用方法:
-- std::condition_variable cv;
   

@@ -5,6 +5,14 @@
 > https://www.bilibili.com/video/BV1Fb421H7ep/?p=3&t=279
 
 
+
+###### 改进
+- 任务列表采用优先级队列, 可以设置优先级. 优先级高的任务先执行, id小的先执行
+- 线程池可以暂停, 恢复
+- 暂停时, 线程函数不再执行任务, 可以继续提交任务.
+- 销毁线程池前, 禁止提交, 并完成队列中的任务
+
+## 一些概念
 ###### io密集和cpu密集
 
 - io密集指的是 频繁地使用io, 而IO会导致阻塞
@@ -38,7 +46,17 @@
 - 固定数量线程: fixed 模式
 - 可动态增长的线程池: cached 模式
 
-###### cpp条件变量 condition_variable
->  https://en.cppreference.com/w/cpp/thread/condition_variable
+## 一些STL参考链接
 
+条件变量 https://en.cppreference.com/w/cpp/thread/condition_variable
+
+unique_lock https://en.cppreference.com/w/cpp/thread/unique_lock
+
+std::unique_lock or std::lock_guard: Which Is Better?     https://www.geeksforgeeks.org/stdunique_lock-or-stdlock_guard-which-is-better/
+
+packaged_task
+https://en.cppreference.com/w/cpp/thread/packaged_task
+
+async
+https://en.cppreference.com/w/cpp/thread/async
   

@@ -54,7 +54,7 @@ public:
 private:
 	using atomic_num = std::atomic_size_t;
 	using Task_Type = std::function<void()>;
-	using Task_Type_full = std::tuple<Priority, size_t, Task_Type>;
+	using Task_Type_full = std::tuple<Priority, size_t, Task_Type>;  // 优先级, 任务ID, 打包的任务函数
 
 	struct queue_compare {
 		bool operator()(const Task_Type_full& lhs, const Task_Type_full& rhs) {
@@ -81,8 +81,8 @@ private:
 	atomic_num idleThread_Num = 0;  // 已分配的线程中, 未在执行任务的线程数
 	std::atomic_bool isRunning = false;
 
-	std::mutex Thread_Mutex;  // 用于保护线程池一致性
-	std::unordered_map<int, std::unique_ptr<Thread>> Threads_Map;
+	std::mutex Thread_Mutex;                                       // 用于保护线程池一致性
+	std::unordered_map<int, std::unique_ptr<Thread>> Threads_Map;  // 存放线程的容器
 
 public:
 	void Thread_Func(const int thread_id, const bool& stop);
@@ -90,7 +90,7 @@ public:
 	void remove_Thread(const int);                                            // 停止并回收一个线程
 	void start(size_t initThreadSize = std::thread::hardware_concurrency());  // 启动线程池
 
-	void stop_pool();  // 停止所有线程并回收, 不需要执行任务队列中的任务, 也不停止提交任务
+	void stop_pool();  // 停止所有线程并回收, 然后不再继续执行任务队列中的任务, 但不停止提交任务
 
 	void remove_pool() {  // 停止提交任务, 执行任务队列中的任务, 停止所有线程并回收.
 		if (!isRunning && stop_submit) {
@@ -118,7 +118,7 @@ public:
 private:
 	std::counting_semaphore<Task_MAX_NUM> Task_Semaphore;
 	inline static size_t Task_ID = 0;
-	std::priority_queue<Task_Type_full, std::vector<Task_Type_full>, queue_compare> Task_Q;
+	std::priority_queue<Task_Type_full, std::vector<Task_Type_full>, queue_compare> Task_Q;  // 存储任务的容器
 	std::mutex Task_Q_Mutex;
 	atomic_num Task_Num = 0;
 	// atomic_num Task_Num_Max = 100;
@@ -132,14 +132,15 @@ public:
 
 public:
 	template <typename Func, typename... Args>
-	std::result_of_t<Func(Args...)> submit_task(Func&& func, Args&&... args, Priority p = LOW, bool useasync = false);
+	std::future<std::result_of_t<Func(Args...)>> submit_task(Func&& func, Args&&... args, Priority p = LOW, bool useasync = false);
 };
 
+// 提交任务, 向任务队列中增加任务, 优先级默认为LOW, 默认当队列满时,默认不使用async函数
 template <size_t Thread_MAX_NUM, size_t Task_MAX_NUM>
 template <typename Func, typename... Args>
 auto Thread_Pool<Thread_MAX_NUM, Task_MAX_NUM>::submit_task(Func&& func, Args&&... args, Priority p,
-                                                            bool useasync) -> std::result_of_t<Func(Args...)> {
-	using ReturnType = std::result_of_t<Func(Args...)>;  // 任务实际返回类型
+                                                            bool useasync) -> std::future<std::result_of_t<Func(Args...)>> {
+	using ReturnType = std::result_of_t<Func(Args...)>;  // 任务实际返回类型(不含future层)
 
 	bool fault = false;
 
@@ -158,7 +159,7 @@ auto Thread_Pool<Thread_MAX_NUM, Task_MAX_NUM>::submit_task(Func&& func, Args&&.
 		} else {
 			std::cerr << "将返回无效的future" << std::endl;
 			return std::async(std::launch::deferred, []() -> ReturnType {
-				return ReturnType();
+				return ReturnType{};
 			});
 		}
 	}
@@ -169,17 +170,18 @@ auto Thread_Pool<Thread_MAX_NUM, Task_MAX_NUM>::submit_task(Func&& func, Args&&.
 		std::cerr << "无法建立任务" << std::endl;
 		Task_Semaphore.release();
 
-		auto task_ptr = std::make_shared(std::packaged_task<ReturnType()>([]() -> ReturnType {
-			return ReturnType();
+		// 返回一个空的结果
+		auto task_ptr_tmp = std::make_shared(std::packaged_task<ReturnType()>([]() {
+			return ReturnType{};
 		}));
-		(*task_ptr)();
-		return task_ptr->get_future();
+		(*task_ptr_tmp)();
+		return task_ptr_tmp->get_future();
 	}
 
 	std::unique_lock<std::mutex> lock(Task_Q_Mutex);  // 保护任务队列入队操作
 	Task_Q.emplace(p, Task_ID++, [task_ptr]() {
 		(*task_ptr)();
-	});
+	});  // 将任务打包为 std::function<void()> 函数对象
 
 	++Task_Num;
 	Task_notEmpty.notify_one();
